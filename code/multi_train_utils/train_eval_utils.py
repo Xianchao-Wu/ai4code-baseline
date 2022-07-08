@@ -73,7 +73,7 @@ def evaluate(model, data_loader, device, val_df, df_orders):
         data_loader = tqdm(data_loader, file=sys.stdout)
 
     for step, data in enumerate(data_loader):
-        inputs, target = read_data(data)
+        inputs, target = read_data(data, device)
 
         with torch.cuda.amp.autocast():
             #pred = model(images.to(device))
