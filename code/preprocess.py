@@ -6,7 +6,8 @@ from scipy import sparse
 from tqdm import tqdm
 import os
 
-data_dir = Path('..//input/')
+#data_dir = Path('..//input/')
+data_dir = Path('/workspace/jpx/ai4code/')
 if not os.path.exists("./data"):
     os.mkdir("./data")
 
@@ -83,7 +84,7 @@ train_df.to_csv("./data/train.csv", index=False)
 def clean_code(cell):
     return str(cell).replace("\\n", "\n")
 
-
+# TODO why 200???
 def sample_cells(cells, n):
     cells = [clean_code(cell) for cell in cells]
     if n >= len(cells):
@@ -100,7 +101,7 @@ def sample_cells(cells, n):
             results[-1] = cells[-1]
         return results
 
-
+# TODO how about changing 20 to other values???
 def get_features(df):
     features = dict()
     df = df.sort_values("rank").reset_index(drop=True)

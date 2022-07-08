@@ -142,5 +142,7 @@ def train(model, train_loader, val_loader, epochs):
 
 
 model = MarkdownModel(args.model_name_or_path)
-model = model.cuda()
+#model = model.cuda()
+device = 'cuda:1'
+model = model.to(device)
 model, y_pred = train(model, train_loader, val_loader, epochs=args.epochs)
