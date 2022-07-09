@@ -27,10 +27,19 @@ parser.add_argument('--accumulation_steps', type=int, default=4)
 parser.add_argument('--epochs', type=int, default=5)
 parser.add_argument('--n_workers', type=int, default=8)
 
+parser.add_argument('--data-path', type=str, default='/workspace/jpx/ai4code/', help='data path')
+parser.add_argument('--out-model-path', type=str, default='./outputs.mgpu/', help='output checkpointpath')
+
+# initial weight path
+parser.add_argument('--weights', type=str, default='', help='initial weights (existing checkpoint) path')
+parser.add_argument('--device', default='cuda:0', help='device id (i.e., 0 or 0,1 or cpu)')
+
+
 args = parser.parse_args()
 #os.makedirs("./outputs", exist_ok=True)
 #data_dir = Path('..//input/')
-data_dir = Path('/workspace/jpx/ai4code/')
+#data_dir = Path('/workspace/jpx/ai4code/')
+data_dir = Path(args.data_path)
 
 #import ipdb; ipdb.set_trace()
 
@@ -40,7 +49,7 @@ val_df_mark = pd.read_csv(args.val_mark_path).drop("parent_id", axis=1).dropna()
 val_fts = json.load(open(args.val_features_path))
 val_df = pd.read_csv(args.val_path)
 
-order_df = pd.read_csv(os.path.join(data_dir, "train_orders.csv")).set_index("id")
+#order_df = pd.read_csv(os.path.join(data_dir, "train_orders.csv")).set_index("id")
 df_orders = pd.read_csv(
     data_dir / 'train_orders.csv',
     index_col='id',
@@ -136,11 +145,23 @@ def train(model, train_loader, val_loader, epochs):
 
         ktau = kendall_tau(df_orders.loc[y_dummy.index], y_dummy)
         print("Preds score", ktau) #kendall_tau(df_orders.loc[y_dummy.index], y_dummy))
-        torch.save(model.state_dict(), "./outputs/model_{}_ktau{}.bin".format(e, ktau))
+        torch.save(model.state_dict(), "./outputs/a100_model_{}_ktau{}.bin".format(e, ktau))
 
     return model, y_pred
 
 
 model = MarkdownModel(args.model_name_or_path)
+
+# TODO
+weights_path = args.weights
+
+if os.path.exists(weights_path):
+    device = torch.device(args.device)
+    weights_dict = torch.load(weights_path, map_location=device)
+    load_weights_dict = {k:v for k, v in weights_dict.items()
+            if model.state_dict()[k].numel() == v.numel()}
+    model.load_state_dict(load_weights_dict, strict=False)
+    print('loaded checkpoint from: {}'.format(weights_path))
+
 model = model.cuda()
 model, y_pred = train(model, train_loader, val_loader, epochs=args.epochs)
