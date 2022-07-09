@@ -51,7 +51,7 @@ def train_one_epoch(model, optimizer, scheduler, data_loader, device, epoch, acc
         avg_loss = np.round(np.mean(loss_list), 4)
         if is_main_process():
             data_loader.set_description('Epoch={}, loss={}, avg_Loss={}, mean_loss={}, LR={}'.format(
-                epoch, np.round(loss.detach(), 4), avg_loss, mean_loss.item(), 
+                epoch, round(loss.detach().cpu().item(), 4), avg_loss, mean_loss.item(), 
                 scheduler.get_last_lr()))
         break # for debug only TODO
 
@@ -89,9 +89,19 @@ def evaluate(model, data_loader, device, val_df, df_orders):
     y_val = np.concatenate(labels)
    
     # TODO need to check this code: [run in cpu!]
-    val_df['pred'] = val_df.groupby(['id', 'cell_type'])['rank'].rank(pct=True)
-    val_df.loc[val_df['cell_type'] == 'markdown', 'pred'] = y_pred
-    y_dummy = val_df.sort_values('pred').groupby('id')['cell_id'].apply(list)
+    #val_df['pred'] = val_df.groupby(['id', 'cell_type'])['rank'].rank(pct=True)
+    #val_df.loc[val_df['cell_type'] == 'markdown', 'pred'] = y_pred
+    #y_dummy = val_df.sort_values('pred').groupby('id')['cell_id'].apply(list)
+
+    val_df["pred"] = val_df.groupby(["id", "cell_type"])["rank"].rank(pct=True)
+    if is_main_process():
+        temp = val_df.loc[val_df["cell_type"] == "markdown", "pred"] 
+        print('temp.shape={}'.format(temp.shape))
+        print('y_pred.shape={}'.format(y_pred.shape))
+
+    val_df.loc[val_df["cell_type"] == "markdown", "pred"] = y_pred
+    y_dummy = val_df.sort_values("pred").groupby('id')['cell_id'].apply(list)
+
 
     ktau = kendall_tau(df_orders.loc[y_dummy.index], y_dummy)
     #sum_num += ktau # TODO should put ktau to torch.Tensor...
