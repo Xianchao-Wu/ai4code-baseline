@@ -80,16 +80,18 @@ def train_evaluate(model, train_loader, train_sampler, val_loader,
         scheduler.step()
         
         # evaluate
-        ktau = evaluate(model=model,
-                data_loader=val_loader,
-                device=device, 
-                val_df=val_df,
-                df_orders=df_orders)
+        #ktau = evaluate(model=model,
+        #        data_loader=val_loader,
+        #        device=device, 
+        #        val_df=val_df,
+        #        df_orders=df_orders)
+        ktau = 0.618 # TODO train anyway and check ktau after training is also fine!
 
-        if rank == 0:
+        if args.rank == 0:
             print('epoch {}, k-tau={}'.format(epoch, round(ktau, 4)))
             torch.save(model.module.state_dict(), 
-                    os.path.join(args.out_model_path, 'model_{}_ktau{}.bin'.format(epoch, round(ktau,4))))
+                    os.path.join(args.out_model_path, 
+                        'a100_model_{}_ktau{}.bin'.format(epoch, round(ktau,4))))
 
 def main(args):
     if torch.cuda.is_available() is False:
@@ -110,11 +112,11 @@ def main(args):
 
     data_dir = Path(args.data_path)
 
-    #train_df_mark = pd.read_csv(args.train_mark_path).drop("parent_id", axis=1).dropna().reset_index(drop=True)
-    #train_fts = json.load(open(args.train_features_path))
-    
-    train_df_mark = pd.read_csv(args.val_mark_path).drop("parent_id", axis=1).dropna().reset_index(drop=True)
-    train_fts = json.load(open(args.val_features_path))
+    train_df_mark = pd.read_csv(args.train_mark_path).drop("parent_id", axis=1).dropna().reset_index(drop=True)
+    train_fts = json.load(open(args.train_features_path))
+    # TODO    
+    #train_df_mark = pd.read_csv(args.val_mark_path).drop("parent_id", axis=1).dropna().reset_index(drop=True)
+    #train_fts = json.load(open(args.val_features_path))
 
     val_df_mark = pd.read_csv(args.val_mark_path).drop("parent_id", axis=1).dropna().reset_index(drop=True)
     val_fts = json.load(open(args.val_features_path))

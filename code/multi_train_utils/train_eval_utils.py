@@ -51,9 +51,9 @@ def train_one_epoch(model, optimizer, scheduler, data_loader, device, epoch, acc
         avg_loss = np.round(np.mean(loss_list), 4)
         if is_main_process():
             data_loader.set_description('Epoch={}, loss={}, avg_Loss={}, mean_loss={}, LR={}'.format(
-                epoch, np.round(loss.detach(), 4), avg_loss, mean_loss.item(), 
+                epoch, loss.detach().cpu().item(), avg_loss, mean_loss.item(), 
                 scheduler.get_last_lr()))
-        break # for debug only TODO
+        #break # for debug only TODO
 
     if device != torch.device('cpu'):
         torch.cuda.synchronize(device)
@@ -83,7 +83,7 @@ def evaluate(model, data_loader, device, val_df, df_orders):
 
         preds.append(pred.detach().cpu().numpy().ravel()) # ravel() -> 数组多维度拉成一维数组
         labels.append(target.detach().cpu().numpy().ravel())
-        break # TODO debug only
+        #break # TODO debug only
 
     y_pred = np.concatenate(preds)
     y_val = np.concatenate(labels)
