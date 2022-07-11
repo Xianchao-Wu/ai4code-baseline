@@ -37,15 +37,21 @@ parser.add_argument('--data-path', type=str, default='/workspace/jpx/ai4code/', 
 parser.add_argument('--feature-file-path', type=str, default='./data', help='path of feature files')
 parser.add_argument('--out-model-path', type=str, default='./outputs.mgpu/', help='output checkpointpath')
 
+parser.add_argument('--loss', type=str, default='L1', help='L1 or MSE loss')
+
 # initial weight path
 parser.add_argument('--weights', type=str, default='', help='initial weights (existing checkpoint) path')
 parser.add_argument('--device', default='cuda:0', help='device id (i.e., 0 or 0,1 or cpu)')
 
 args = parser.parse_args()
+print(args)
 #os.makedirs("./outputs", exist_ok=True)
 #data_dir = Path('..//input/')
 #data_dir = Path('/workspace/jpx/ai4code/')
 data_dir = Path(args.data_path)
+
+if os.path.exists(args.out_model_path) is False:
+    os.makedirs(args.out_model_path)
 
 #import ipdb; ipdb.set_trace()
 
@@ -144,7 +150,7 @@ def validate(model, val_loader, device):
                 json_id_list.extend(list(json_ids))
                 cell_id_list.extend(list(cell_ids))
 
-            break # TODO for multi-gpu debug only!
+            #break # TODO for multi-gpu debug only!
     #import ipdb; ipdb.set_trace()
     return np.concatenate(labels), np.concatenate(preds), np.array(json_id_list), np.array(cell_id_list)
 
@@ -165,7 +171,10 @@ def train(model, train_loader, val_loader, epochs, device):
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0.05 * num_train_optimization_steps,
                                                 num_training_steps=num_train_optimization_steps)  # PyTorch scheduler
 
-    criterion = torch.nn.L1Loss()
+    criterion = torch.nn.L1Loss() if args.loss == 'L1' else torch.nn.MSELoss()
+    # TODO torch.nn.MSELoss() # can try other types of loss functions!
+    print('loss=', criterion)
+
     scaler = torch.cuda.amp.GradScaler()
     
     #import ipdb; ipdb.set_trace()
@@ -209,16 +218,20 @@ def train(model, train_loader, val_loader, epochs, device):
 
             avg_loss = np.round(np.mean(loss_list), 4)
 
-            tbar.set_description(f"Epoch {e + 1} Loss: {avg_loss} lr: {scheduler.get_last_lr()}")
+            tbar.set_description(f"Epoch {e} Loss: {avg_loss} lr: {scheduler.get_last_lr()}")
 
         y_val, y_pred, json_ids, cell_ids = validate(model, val_loader, device)
+
         #val_df["pred"] = val_df.groupby(["id", "cell_type"])["rank"].rank(pct=True)
         val_df.loc[val_df["cell_type"] == "markdown", "pred"] = y_pred
         y_dummy = val_df.sort_values("pred").groupby('id')['cell_id'].apply(list)
 
         ktau = kendall_tau(df_orders.loc[y_dummy.index], y_dummy)
         print("Preds score", ktau) #kendall_tau(df_orders.loc[y_dummy.index], y_dummy))
-        torch.save(model.state_dict(), "./outputs/a100_model_{}_ktau{}.bin".format(e, ktau))
+
+        out_model = os.path.join(args.out_model_path, "model_{}_ktau{}.bin".format(e, ktau))
+        print('save checkpoint to {}'.format(out_model))
+        torch.save(model.state_dict(), out_model) 
 
     return model, y_pred
 
