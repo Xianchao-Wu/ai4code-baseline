@@ -1,12 +1,13 @@
-#########################################################################
-# File Name: run.launch.sh
-# Author: Xianchao Wu
-# mail: xianchaow@nvidia.com
-# Created Time: Thu Jul  7 11:15:22 2022
-#########################################################################
-#!/bin/bash
 
 python train.py \
-	--n_workers=8 \
-	--weights="./outputs/model_3_ktau0.8381995542759781.bin" \
-	--batch_size=64
+	--md_max_len=64 \
+	--total_max_len=512 \
+	--num_code_cell=40 \
+	--batch_size=24 \
+	--epochs=20 \
+	--n_workers=4 \
+	--feature-file-path='./data_code40_clen100_val0.1' \
+	--out-model-path='./outputs.1gpu.code40.clean100.v0.1' \
+	--weights='./outputs/model_11_ktau0.8480169613968561.bin' \
+	--device='cuda:1'
+

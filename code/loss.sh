@@ -6,6 +6,6 @@
 #########################################################################
 #!/bin/bash
 
-cat run.mgpu.launch.sh.log | python comp_avg_loss.py > avg_train_loss_per_epoch.log 2>&1 
+cat run.mgpu.launch.sh.log.2 | python comp_avg_loss.py > avg_train_loss_per_epoch.log 2>&1 
 
 tail -n 20 avg_train_loss_per_epoch.log | grep -v "Epoch"

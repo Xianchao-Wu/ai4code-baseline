@@ -66,8 +66,10 @@ val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_w
 print('after init dataset and data-loader = {}'.format(time.time() - start_time))
 
 def read_data(data):
-    return tuple(d.cuda() for d in data[:-1]), data[-1].cuda()
-
+    # case 1: ids, mask, fts, target (pct_rank)
+    # case 2: ids, mask, fts, target (pct_rank), json_ids, cell_ids
+    target_idx = -1 if (len(data) == 4) else -3
+    return tuple(d.to(device) for d in data[:target_idx]), data[target_idx].to(device)
 
 def validate(model, val_loader):
     model.eval()

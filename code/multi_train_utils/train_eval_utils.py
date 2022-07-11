@@ -10,7 +10,11 @@ sys.path.append('../')
 from metrics import * # load kendall_tau method 
 
 def read_data(data, device):
-    return tuple(d.to(device) for d in data[:-1]), data[-1].to(device)
+    #return tuple(d.to(device) for d in data[:-1]), data[-1].to(device)
+    # case 1: ids, mask, fts, target (pct_rank)
+    # case 2: ids, mask, fts, target (pct_rank), json_ids, cell_ids
+    target_idx = -1 if (len(data) == 4) else -3
+    return tuple(d.to(device) for d in data[:target_idx]), data[target_idx].to(device)
 
 def train_one_epoch(model, optimizer, scheduler, data_loader, device, epoch, accumulation_steps):
     model.train()
@@ -68,6 +72,7 @@ def evaluate(model, data_loader, device, val_df, df_orders):
     sum_num = torch.zeros(1).to(device)
 
     preds, labels = [], [] # TODO 这个如何在多个gpu之间搞事情呢???
+    json_id_list, cell_id_list = [], []
     # 或者，只计算均值k-tau即可???
 
     # 在进程0中打印验证进度
@@ -76,6 +81,10 @@ def evaluate(model, data_loader, device, val_df, df_orders):
 
     for step, data in enumerate(data_loader):
         inputs, target = read_data(data, device)
+        json_ids, cell_ids = None, None
+        if len(data) == 6:
+            json_ids = data[-2] # e.g., ('000b8e6d58544b', '000b8e6d58544b')
+            cell_ids = data[-1] # e.g., ('5287437b', 'e8672233')
 
         with torch.cuda.amp.autocast():
             #pred = model(images.to(device))
@@ -84,6 +93,9 @@ def evaluate(model, data_loader, device, val_df, df_orders):
         preds.append(pred.detach().cpu().numpy().ravel()) # ravel() -> 数组多维度拉成一维数组
         labels.append(target.detach().cpu().numpy().ravel())
         #break # TODO debug only
+        if json_ids is not None and cell_ids is not None:
+            json_id_list.extend(list(json_ids))
+            cell_id_list.extend(list(cell_ids))
 
     y_pred = np.concatenate(preds)
     y_val = np.concatenate(labels)

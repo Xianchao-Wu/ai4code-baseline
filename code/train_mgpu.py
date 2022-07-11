@@ -91,7 +91,7 @@ def train_evaluate(model, train_loader, train_sampler, val_loader,
             print('epoch {}, k-tau={}'.format(epoch, round(ktau, 4)))
             torch.save(model.module.state_dict(), 
                     os.path.join(args.out_model_path, 
-                        'a100_model_{}_ktau{}.bin'.format(epoch, round(ktau,4))))
+                        'dgx1_model_{}_ktau{}.bin'.format(epoch, round(ktau,4))))
 
 def main(args):
     if torch.cuda.is_available() is False:
