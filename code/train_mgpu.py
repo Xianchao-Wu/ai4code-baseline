@@ -17,15 +17,20 @@ from multi_train_utils.train_eval_utils import train_one_epoch, evaluate
 def parse_args():
     parser = argparse.ArgumentParser(description='Process some arguments')
     parser.add_argument('--model_name_or_path', type=str, default='microsoft/codebert-base')
-    parser.add_argument('--train_mark_path', type=str, default='./data/train_mark.csv')
-    parser.add_argument('--train_features_path', type=str, default='./data/train_fts.json')
-    parser.add_argument('--val_mark_path', type=str, default='./data/val_mark.csv')
-    #parser.add_argument('--val_features_path', type=str, default='./data/val_fts.csv')
-    parser.add_argument('--val_features_path', type=str, default='./data/val_fts.json')
-    parser.add_argument('--val_path', type=str, default="./data/val.csv")
+
+
+    parser.add_argument('--train_mark_path', type=str, default='train_mark.csv')
+    parser.add_argument('--train_features_path', type=str, default='train_fts.json')
+    parser.add_argument('--val_mark_path', type=str, default='val_mark.csv')
+    parser.add_argument('--val_features_path', type=str, default='val_fts.json')
+    parser.add_argument('--val_path', type=str, default="val.csv")
+
 
     parser.add_argument('--md_max_len', type=int, default=64)
     parser.add_argument('--total_max_len', type=int, default=512)
+    parser.add_argument('--num_code_cell', type=int, default=20, 
+            help='num of code cells for current markdown as context')
+
     parser.add_argument('--batch_size', type=int, default=8)
     parser.add_argument('--lr', type=float, default=3e-5)
 
@@ -34,7 +39,10 @@ def parse_args():
     parser.add_argument('--n_workers', type=int, default=8)
 
     parser.add_argument('--data-path', type=str, default='/workspace/jpx/ai4code/', help='data path')
+    parser.add_argument('--feature-file-path', type=str, default='./data', help='path of feature files')
     parser.add_argument('--out-model-path', type=str, default='./outputs.mgpu/', help='output checkpoint path')
+
+    parser.add_argument('--loss', type=str, default='L1', help='L1 or MSE loss')
 
     # initial weight path
     parser.add_argument('--weights', type=str, default='', help='initial weights (existing checkpoint) path')
@@ -54,16 +62,22 @@ def train_evaluate(model, train_loader, train_sampler, val_loader,
     param_optimizer = list(model.named_parameters())
     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        {'params': 
+            [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+        {'params': 
+            [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
 
     num_train_optimization_steps = int(args.epochs * len(train_loader) / args.accumulation_steps)
 
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.lr,
-        correct_bias=False)  # To reproduce BertAdam specific behavior set correct_bias=False
-    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0.05 * num_train_optimization_steps,
-        num_training_steps=num_train_optimization_steps)  # PyTorch scheduler
+            correct_bias=False)  # To reproduce BertAdam specific behavior set correct_bias=False
+    scheduler = get_linear_schedule_with_warmup(optimizer, 
+            num_warmup_steps=0.05 * num_train_optimization_steps,
+            num_training_steps=num_train_optimization_steps)  # PyTorch scheduler
+    
+    criterion = torch.nn.L1Loss() if args.loss == 'L1' else torch.nn.MSELoss() # CrossEntropyLoss()
+    scaler = torch.cuda.amp.GradScaler()
     
     for epoch in range(args.epochs):
         train_sampler.set_epoch(epoch)
@@ -72,6 +86,8 @@ def train_evaluate(model, train_loader, train_sampler, val_loader,
         mean_loss = train_one_epoch(model=model,
                 optimizer=optimizer,
                 scheduler=scheduler,
+                criterion=criterion,
+                scaler=scaler,
                 data_loader=train_loader,
                 device=device,
                 epoch=epoch,
@@ -91,7 +107,7 @@ def train_evaluate(model, train_loader, train_sampler, val_loader,
             print('epoch {}, k-tau={}'.format(epoch, round(ktau, 4)))
             torch.save(model.module.state_dict(), 
                     os.path.join(args.out_model_path, 
-                        'dgx1_model_{}_ktau{}.bin'.format(epoch, round(ktau,4))))
+                        'a100_model_{}_ktau{}.bin'.format(epoch, round(ktau,4))))
 
 def main(args):
     if torch.cuda.is_available() is False:
@@ -112,32 +128,66 @@ def main(args):
 
     data_dir = Path(args.data_path)
 
-    train_df_mark = pd.read_csv(args.train_mark_path).drop("parent_id", axis=1).dropna().reset_index(drop=True)
-    train_fts = json.load(open(args.train_features_path))
+    #train_df_mark = pd.read_csv(args.train_mark_path).drop("parent_id", axis=1).dropna().reset_index(drop=True)
+    # 1
+    train_mark_path = os.path.join(args.feature_file_path, args.train_mark_path)
+    print('read train mark file = {}'.format(train_mark_path))
+    train_df_mark = pd.read_csv(train_mark_path).drop("parent_id", axis=1).dropna().reset_index(drop=True)
+
+    #train_fts = json.load(open(args.train_features_path))
+    # 2
+    train_features_path = os.path.join(args.feature_file_path, args.train_features_path)
+    print('read train features file = {}'.format(train_features_path))
+    train_fts = json.load(open(train_features_path))
+
     # TODO    
     #train_df_mark = pd.read_csv(args.val_mark_path).drop("parent_id", axis=1).dropna().reset_index(drop=True)
     #train_fts = json.load(open(args.val_features_path))
 
-    val_df_mark = pd.read_csv(args.val_mark_path).drop("parent_id", axis=1).dropna().reset_index(drop=True)
-    val_fts = json.load(open(args.val_features_path))
-    val_df = pd.read_csv(args.val_path)
+    #val_df_mark = pd.read_csv(args.val_mark_path).drop("parent_id", axis=1).dropna().reset_index(drop=True)
+    # 3
+    #val_mark_path = os.path.join(args.feature_file_path, args.val_mark_path)
+    #print('read val mark file = {}'.format(val_mark_path))
+    #val_df_mark = pd.read_csv(val_mark_path).drop("parent_id", axis=1).dropna().reset_index(drop=True)
+
+    
+    #val_fts = json.load(open(args.val_features_path))
+    # 4
+    #val_features_path = os.path.join(args.feature_file_path, args.val_features_path)
+    #print('read val features file = {}'.format(val_features_path))
+    #val_fts = json.load(open(val_features_path))
+
+    #val_df = pd.read_csv(args.val_path)
+    # 5
+    #val_path = os.path.join(args.feature_file_path, args.val_path)
+    #print('read val path file = {}'.format(val_path))
+    #val_df = pd.read_csv(val_path)
+    val_df = None
 
     #order_df = pd.read_csv(os.path.join(data_dir, "train_orders.csv")).set_index("id")
-    df_orders = pd.read_csv(
-        data_dir / 'train_orders.csv',
-        index_col='id',
-        squeeze=True,
-    ).str.split()
+    #df_orders = pd.read_csv(
+    #    data_dir / 'train_orders.csv',
+    #    index_col='id',
+    #    squeeze=True,
+    #).str.split()
+    df_orders = None
 
     train_ds = MarkdownDataset(train_df_mark, 
-            model_name_or_path=args.model_name_or_path, md_max_len=args.md_max_len,
-            total_max_len=args.total_max_len, fts=train_fts)
-    val_ds = MarkdownDataset(val_df_mark, 
-            model_name_or_path=args.model_name_or_path, md_max_len=args.md_max_len,
-            total_max_len=args.total_max_len, fts=val_fts)
+            model_name_or_path=args.model_name_or_path, 
+            md_max_len=args.md_max_len,
+            total_max_len=args.total_max_len, 
+            num_code_cell=args.num_code_cell,
+            fts=train_fts)
+
+    #val_ds = MarkdownDataset(val_df_mark, 
+    #        model_name_or_path=args.model_name_or_path, 
+    #        md_max_len=args.md_max_len,
+    #        total_max_len=args.total_max_len, 
+    #        num_code_cell=args.num_code_cell,
+    #        fts=val_fts)
 
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_ds)
-    val_sampler = torch.utils.data.distributed.DistributedSampler(val_ds)
+    #val_sampler = torch.utils.data.distributed.DistributedSampler(val_ds)
 
     train_batch_sampler = torch.utils.data.BatchSampler(
             train_sampler, batch_size, drop_last=True)
@@ -153,15 +203,18 @@ def main(args):
     train_loader = DataLoader(train_ds, 
             batch_sampler=train_batch_sampler,
             pin_memory=True,
-            num_workers=args.n_workers) #,
+            num_workers=args.n_workers,
+            drop_last=False) #,
             #collate_fn=train_ds.collate_fn) # TODO
 
-    val_loader = DataLoader(val_ds,
-            batch_size=args.batch_size,
-            sampler=val_sampler,
-            pin_memory=True,
-            num_workers=args.n_workers)#,
-            #collate_fn=val_ds.collate_fn) # TODO
+    #val_loader = DataLoader(val_ds,
+    #        batch_size=args.batch_size,
+    #        sampler=val_sampler,
+    #        pin_memory=True,
+    #        num_workers=args.n_workers,
+    #        drop_last=False)#,
+    #        #collate_fn=val_ds.collate_fn) # TODO
+    val_loader = None
 
     model = MarkdownModel(args.model_name_or_path).to(device)
     #model = model.cuda()
@@ -186,7 +239,6 @@ def main(args):
     model = torch.nn.parallel.DistributedDataParallel(model, 
             device_ids=[args.gpu],
             find_unused_parameters=True)
-
 
     #pg = [p for p in model.parameters() if p.requires_grad]
     #optimizer = optim.SGD(pg, lr=args.lr, momentum=0.9, weight_decay=0.005)

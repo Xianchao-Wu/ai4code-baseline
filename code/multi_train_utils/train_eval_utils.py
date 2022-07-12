@@ -16,11 +16,12 @@ def read_data(data, device):
     target_idx = -1 if (len(data) == 4) else -3
     return tuple(d.to(device) for d in data[:target_idx]), data[target_idx].to(device)
 
-def train_one_epoch(model, optimizer, scheduler, data_loader, device, epoch, accumulation_steps):
+def train_one_epoch(model, optimizer, scheduler, 
+        criterion, scaler, data_loader, device, epoch, accumulation_steps):
     model.train()
     # mean absolute error (MAE) |x(n) - y(n)|, reduction='mean' by default
-    criterion = torch.nn.L1Loss() # CrossEntropyLoss()
-    scaler = torch.cuda.amp.GradScaler()
+    #criterion = torch.nn.L1Loss() # CrossEntropyLoss()
+    #scaler = torch.cuda.amp.GradScaler()
 
     mean_loss = torch.zeros(1).to(device)
     optimizer.zero_grad()
