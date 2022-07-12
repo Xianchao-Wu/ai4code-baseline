@@ -5,7 +5,7 @@ python train.py \
 	--num_code_cell=30 \
 	--batch_size=24 \
 	--epochs=20 \
-	--n_workers=4 \
+	--n_workers=2 \
 	--feature-file-path='./data_code30_clen134_val0.01' \
 	--out-model-path='./outputs.1gpu.code30.clen134.v0.01' \
 	--weights='./outputs/a100_model_0_ktau0.853742298611357.bin' \
